@@ -1,5 +1,6 @@
 {
   "user_agent": "aoe4-friends-stats/1.0 (+contato: pedrodelavor0@gmail.com)",
+  "summaries_per_run": 150,
   "players": [
     { "profile_id": 24270406, "alias": "floiiD" },
     { "profile_id": 23812852, "alias": "CORONEL767" },

@@ -56,6 +56,73 @@ CREATE INDEX IF NOT EXISTS idx_games_kind     ON games(kind);
 CREATE INDEX IF NOT EXISTS idx_gp_profile     ON game_players(profile_id);
 CREATE INDEX IF NOT EXISTS idx_gp_game_team   ON game_players(game_id, team);
 
+-- Resumo detalhado por partida (endpoint /players/{id}/games/{gid}/summary).
+-- status: ok = baixado, missing = a API nao tem resumo, error = falha temporaria.
+CREATE TABLE IF NOT EXISTS game_summaries (
+    game_id     INTEGER PRIMARY KEY,
+    fetched_at  TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    version     INTEGER,
+    win_reason  TEXT,
+    error       TEXT,
+    FOREIGN KEY (game_id) REFERENCES games(game_id) ON DELETE CASCADE
+);
+
+-- Uma linha por jogador por partida com os numeros do resumo.
+CREATE TABLE IF NOT EXISTS player_summaries (
+    game_id            INTEGER NOT NULL,
+    profile_id         INTEGER NOT NULL,
+    team               INTEGER,
+    civilization       TEXT,
+    result             TEXT,
+    apm                INTEGER,
+    score_total        INTEGER,
+    score_military     INTEGER,
+    score_economy      INTEGER,
+    score_technology   INTEGER,
+    score_society      INTEGER,
+    spent_total        INTEGER,
+    spent_food         INTEGER,
+    spent_wood         INTEGER,
+    spent_gold         INTEGER,
+    spent_stone        INTEGER,
+    spent_oliveoil     INTEGER,
+    gathered_total     INTEGER,
+    gathered_food      INTEGER,
+    gathered_wood      INTEGER,
+    gathered_gold      INTEGER,
+    gathered_stone     INTEGER,
+    gathered_oliveoil  INTEGER,
+    kills              INTEGER,
+    deaths             INTEGER,
+    razed              INTEGER,
+    buildings_made     INTEGER,
+    buildings_lost     INTEGER,
+    units_made         INTEGER,
+    upgrades           INTEGER,
+    squad_kills        INTEGER,
+    squad_lost         INTEGER,
+    PRIMARY KEY (game_id, profile_id),
+    FOREIGN KEY (game_id) REFERENCES games(game_id) ON DELETE CASCADE
+);
+
+-- Producao e perdas por tipo de unidade (derivado do build order do resumo).
+-- category: eco | militar | cerco | religioso | explorador | outro
+CREATE TABLE IF NOT EXISTS unit_stats (
+    game_id     INTEGER NOT NULL,
+    profile_id  INTEGER NOT NULL,
+    unit_key    TEXT NOT NULL,
+    category    TEXT NOT NULL,
+    made        INTEGER NOT NULL DEFAULT 0,
+    lost        INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (game_id, profile_id, unit_key),
+    FOREIGN KEY (game_id) REFERENCES games(game_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_ps_profile   ON player_summaries(profile_id);
+CREATE INDEX IF NOT EXISTS idx_us_game      ON unit_stats(game_id);
+CREATE INDEX IF NOT EXISTS idx_us_cat       ON unit_stats(category);
+
 CREATE TABLE IF NOT EXISTS sync_log (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     ran_at      TEXT NOT NULL,

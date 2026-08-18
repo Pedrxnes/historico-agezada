@@ -78,6 +78,7 @@ def api_stats(
     season: int | None = COMMON["season"],
     map_name: str | None = COMMON["map_name"],
     min_games: int = Query(3, ge=1, description="minimo de partidas para aparecer em civ/mapa"),
+    cmp_mode: str = Query("avg", description="comparativo: avg (media por partida) ou sum (total)"),
 ):
     """Todos os agregados de uma vez (o frontend faz uma chamada so)."""
     f = parse_filters(preset, players, min_size, date_from, date_to, season, map_name)
@@ -97,7 +98,29 @@ def api_stats(
             "by_lineup": stats.by_lineup(conn, f),
             "by_duration": stats.by_duration(conn, f),
             "timeline": stats.timeline(conn, f),
+            "comparison": stats.comparison(conn, f, cmp_mode),
+            "eco_kills": stats.eco_kills(conn, f),
         }
+    finally:
+        conn.close()
+
+
+@app.get("/api/comparison")
+def api_comparison(
+    preset: str = COMMON["preset"],
+    players: str | None = COMMON["players"],
+    min_size: int = COMMON["min_size"],
+    date_from: str | None = COMMON["date_from"],
+    date_to: str | None = COMMON["date_to"],
+    season: int | None = COMMON["season"],
+    map_name: str | None = COMMON["map_name"],
+    mode: str = Query("avg", description="avg (media por partida) ou sum (total)"),
+):
+    """Matriz jogador x metrica do resumo detalhado (pontuacao, recursos, combate)."""
+    f = parse_filters(preset, players, min_size, date_from, date_to, season, map_name)
+    conn = get_conn()
+    try:
+        return {"comparison": stats.comparison(conn, f, mode), "eco_kills": stats.eco_kills(conn, f)}
     finally:
         conn.close()
 
@@ -128,7 +151,9 @@ def api_health():
     try:
         row = conn.execute("SELECT COUNT(*) AS games FROM games").fetchone()
         last = conn.execute("SELECT MAX(ran_at) AS ts FROM sync_log").fetchone()["ts"]
-        return {"ok": True, "games": row["games"], "last_sync": last}
+        summaries = conn.execute(
+            "SELECT COUNT(*) AS n FROM game_summaries WHERE status = 'ok'").fetchone()["n"]
+        return {"ok": True, "games": row["games"], "summaries": summaries, "last_sync": last}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
     finally:

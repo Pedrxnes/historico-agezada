@@ -291,9 +291,97 @@
     $("#pg-next").disabled = to >= payload.total;
   }
 
+  // ---------- comparativo (matriz jogador x metrica) ----------
+  const numFmt = (v, decimals) => {
+    if (v === null || v === undefined) return "—";
+    if (decimals !== undefined) return v.toLocaleString("pt-BR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    return v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  };
+
+  function fillComparison(cmp) {
+    const table = $("#tbl-comparison");
+    const cols = cmp.groups.flatMap((g) => g.columns);
+    const rows = cmp.rows || [];
+
+    if (!rows.length) {
+      table.querySelector("thead").innerHTML = "";
+      table.querySelector("tbody").innerHTML = '<tr><td class="empty">Sem resumo detalhado nesse filtro. Rode <code>python backend/sync.py --summaries</code>.</td></tr>';
+    } else {
+      // Escala por coluna: a barra mede o valor contra o maior da propria coluna.
+      const max = {};
+      cols.forEach((c) => {
+        max[c.key] = Math.max(0, ...rows.map((r) => Number(r.values[c.key]) || 0));
+      });
+
+      const groupRow = `<tr class="groups"><th class="group" colspan="2"></th>${cmp.groups
+        .map((g) => `<th class="group" colspan="${g.columns.length}">${g.label}</th>`).join("")}</tr>`;
+      const colRow = `<tr class="cols"><th>Jogador</th><th class="num">Part.</th>${cols
+        .map((c) => `<th class="num">${c.label}</th>`).join("")}</tr>`;
+      table.querySelector("thead").innerHTML = groupRow + colRow;
+
+      table.querySelector("tbody").innerHTML = rows.map((r) => {
+        const cells = cols.map((c) => {
+          const v = r.values[c.key];
+          const width = max[c.key] > 0 && v ? Math.max(2, (Number(v) / max[c.key]) * 100) : 0;
+          return `<td class="cell tone-${c.tone}"><span class="bar" style="width:${width.toFixed(1)}%"></span><span class="val">${numFmt(v, c.decimals)}</span></td>`;
+        }).join("");
+        return `<tr><td class="name">${r.label}</td><td class="games num">${r.games}</td>${cells}</tr>`;
+      }).join("");
+    }
+
+    const cov = cmp.coverage;
+    const falta = cov.games - cov.with_summary;
+    $("#cmp-note").innerHTML =
+      `${cmp.mode === "sum" ? "Total somado" : "Média por partida"} sobre ${cov.with_summary} de ${cov.games} partidas do filtro.` +
+      (falta > 0 ? ` ${falta} ainda sem resumo detalhado (partidas antigas costumam não ter).` : "");
+  }
+
+  // ---------- unidades economicas eliminadas ----------
+  function fillEco(eco) {
+    const t = eco.totals;
+    $("#eco-tiles").innerHTML = [
+      ["Eliminadas pelo grupo", t.eliminated.toLocaleString("pt-BR"), `${numFmt(t.eliminated_per_game)} por partida`],
+      ["Perdidas pelo grupo", t.lost.toLocaleString("pt-BR"), `${numFmt(t.lost_per_game)} por partida`],
+      ["Saldo", `${t.balance > 0 ? "+" : ""}${t.balance.toLocaleString("pt-BR")}`, t.balance >= 0 ? "matamos mais economia" : "perdemos mais economia"],
+    ].map(([label, value, foot]) => `
+      <div class="tile">
+        <div class="tile-label">${label}</div>
+        <div class="tile-value">${value}</div>
+        <div class="tile-foot">${foot}</div>
+      </div>`).join("");
+
+    const games = eco.coverage.with_summary || 0;
+    $("#tbl-eco-units tbody").innerHTML = (eco.by_unit || []).map((u) => `
+      <tr>
+        <td>${u.label}</td>
+        <td class="num">${u.total.toLocaleString("pt-BR")}</td>
+        <td class="num">${games ? numFmt(u.total / games) : "—"}</td>
+      </tr>`).join("") || '<tr><td colspan="3" class="empty">Sem dados.</td></tr>';
+
+    $("#tbl-eco-players tbody").innerHTML = (eco.by_player || []).map((p) => `
+      <tr>
+        <td class="us">${p.label}</td>
+        <td class="num">${p.games}</td>
+        <td class="num">${p.made.toLocaleString("pt-BR")}</td>
+        <td class="num">${p.lost.toLocaleString("pt-BR")}</td>
+        <td class="num">${numFmt(p.lost_per_game)}</td>
+        <td class="num">${p.survival === null ? "—" : `${numFmt(p.survival)}%`}</td>
+        <td class="detail">${Object.entries(p.by_unit).map(([k, v]) => `${k}: ${v}`).join(" · ") || "—"}</td>
+      </tr>`).join("") || '<tr><td colspan="7" class="empty">Sem dados.</td></tr>';
+
+    $("#tbl-eco-civs tbody").innerHTML = (eco.by_enemy_civ || []).map((c) => `
+      <tr>
+        <td>${civLabel(c.label)}</td>
+        <td class="num">${c.games}</td>
+        <td class="num">${c.total.toLocaleString("pt-BR")}</td>
+        <td class="num">${numFmt(c.per_game)}</td>
+      </tr>`).join("") || '<tr><td colspan="4" class="empty">Sem dados.</td></tr>';
+  }
+
   // ---------- carregamento ----------
   async function loadStats() {
     const params = currentFilters();
+    params.set("cmp_mode", $("#cmp-mode").value);
     const data = await getJSON(`/api/stats?${params}`);
     const s = data.summary;
 
@@ -315,6 +403,8 @@
     winrateBar("c-map", data.by_map, { max: 12 });
     winrateBar("c-duration", data.by_duration, { max: 6 });
     fillPlayers(data.by_player);
+    fillComparison(data.comparison);
+    fillEco(data.eco_kills);
     rawTables(data);
   }
 
@@ -342,6 +432,7 @@
       : "ainda não sincronizado";
 
     const rerun = () => { state.offset = 0; refresh(); };
+    $("#cmp-mode").addEventListener("change", () => loadStats());
     ["#f-preset", "#f-minsize", "#f-from", "#f-to"].forEach((sel) => $(sel).addEventListener("change", rerun));
     $("#f-players").addEventListener("change", rerun);
     $("#f-reset").addEventListener("click", () => {

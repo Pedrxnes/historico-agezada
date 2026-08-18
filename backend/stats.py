@@ -399,3 +399,262 @@ def facets(conn) -> dict:
         "SELECT DISTINCT season FROM games WHERE season IS NOT NULL ORDER BY season DESC")]
     last_sync = conn.execute("SELECT MAX(ran_at) AS ts FROM sync_log WHERE error IS NULL").fetchone()["ts"]
     return {"players": players, "kinds": kinds, "seasons": seasons, "last_sync": last_sync}
+
+
+# ---------------------------------------------------------------------------
+# Resumo detalhado (tabelas "Comparativo" e "Economia destruida").
+# Depende de `python backend/sync.py --summaries`; sem isso as tabelas vem vazias.
+# ---------------------------------------------------------------------------
+
+# Grupos e colunas do comparativo. `tone` so define a cor da barra no front.
+COMPARISON_GROUPS = [
+    {"label": "Pontuação", "columns": [
+        {"key": "score_total", "label": "Total", "tone": "score"},
+        {"key": "score_military", "label": "Militar", "tone": "score"},
+        {"key": "score_economy", "label": "Econ.", "tone": "score"},
+        {"key": "score_technology", "label": "Tecn.", "tone": "score"},
+        {"key": "score_society", "label": "Social", "tone": "score"},
+    ]},
+    {"label": "Recursos gastos", "columns": [
+        {"key": "spent_total", "label": "Total", "tone": "neutral"},
+        {"key": "spent_food", "label": "Comida", "tone": "food"},
+        {"key": "spent_wood", "label": "Madeira", "tone": "wood"},
+        {"key": "spent_gold", "label": "Ouro", "tone": "gold"},
+        {"key": "spent_stone", "label": "Pedra", "tone": "stone"},
+        {"key": "spent_oliveoil", "label": "Azeite", "tone": "oil"},
+    ]},
+    {"label": "Produção", "columns": [
+        {"key": "units_made", "label": "Unidades", "tone": "neutral"},
+        {"key": "villagers_made", "label": "Aldeões", "tone": "neutral"},
+        {"key": "buildings_made", "label": "Construções", "tone": "neutral"},
+        {"key": "upgrades", "label": "Pesquisas", "tone": "neutral"},
+    ]},
+    {"label": "Combate", "columns": [
+        {"key": "kills", "label": "Abates", "tone": "good"},
+        {"key": "deaths", "label": "Perdas", "tone": "bad"},
+        {"key": "kd", "label": "A/P", "tone": "good", "decimals": 2},
+        {"key": "razed", "label": "Arrasados", "tone": "good"},
+        {"key": "buildings_lost", "label": "Prédios perd.", "tone": "bad"},
+    ]},
+    {"label": "Ritmo", "columns": [
+        {"key": "apm", "label": "APM", "tone": "neutral"},
+    ]},
+]
+
+# Rotulos em portugues das unidades economicas.
+ECO_LABELS_PT = {
+    "villager": "Aldeões",
+    "gilded_villager": "Aldeões dourados (Zhu Xi)",
+    "mounted_villager": "Aldeões montados",
+    "jeanne_villager": "Aldeões (Jeanne)",
+    "treasure_caravan": "Caravanas do tesouro",
+    "reindeer_trader": "Comerciantes (rena)",
+    "trader": "Comerciantes",
+    "camel_trader": "Comerciantes (camelo)",
+    "trade_caravan": "Caravanas",
+    "caravan": "Caravanas",
+    "fishing_boat": "Barcos de pesca",
+    "fishing_ship": "Barcos de pesca",
+}
+
+
+def _eco_label(key: str) -> str:
+    return ECO_LABELS_PT.get(key, key.replace("_", " ").capitalize())
+
+
+def _summary_coverage(conn, f: Filters) -> dict:
+    """Quantas partidas do recorte ja tem resumo detalhado baixado."""
+    cte, params = _base_cte(conn, f)
+    row = conn.execute(f"""{cte}
+        SELECT COUNT(*) AS total,
+               SUM(CASE WHEN s.status = 'ok'      THEN 1 ELSE 0 END) AS with_summary,
+               SUM(CASE WHEN s.status = 'missing' THEN 1 ELSE 0 END) AS without_summary
+        FROM base b
+        LEFT JOIN game_summaries s ON s.game_id = b.game_id
+    """, params).fetchone()
+    return {
+        "games": row["total"] or 0,
+        "with_summary": row["with_summary"] or 0,
+        "without_summary": row["without_summary"] or 0,
+    }
+
+
+def comparison(conn, f: Filters, mode: str = "avg") -> dict:
+    """Matriz jogador x metrica com os numeros do resumo detalhado.
+
+    mode = "avg" (media por partida, padrao) ou "sum" (soma do periodo).
+    So entram partidas do recorte que ja tem resumo baixado.
+    """
+    mode = "sum" if mode == "sum" else "avg"
+    cte, params = _base_cte(conn, f)
+    agg = "SUM" if mode == "sum" else "AVG"
+    sql = f"""{cte},
+    units AS (
+        SELECT us.game_id, us.profile_id,
+               SUM(CASE WHEN us.unit_key LIKE '%villager%' THEN us.made ELSE 0 END) AS villagers_made
+        FROM unit_stats us
+        GROUP BY us.game_id, us.profile_id
+    )
+    SELECT COALESCE(p.alias, p.name, CAST(p.profile_id AS TEXT)) AS label,
+           p.profile_id AS profile_id,
+           COUNT(*) AS games,
+           {agg}(ps.score_total) AS score_total,
+           {agg}(ps.score_military) AS score_military,
+           {agg}(ps.score_economy) AS score_economy,
+           {agg}(ps.score_technology) AS score_technology,
+           {agg}(ps.score_society) AS score_society,
+           {agg}(ps.spent_total) AS spent_total,
+           {agg}(ps.spent_food) AS spent_food,
+           {agg}(ps.spent_wood) AS spent_wood,
+           {agg}(ps.spent_gold) AS spent_gold,
+           {agg}(ps.spent_stone) AS spent_stone,
+           {agg}(COALESCE(ps.spent_oliveoil, 0)) AS spent_oliveoil,
+           {agg}(ps.units_made) AS units_made,
+           {agg}(COALESCE(u.villagers_made, 0)) AS villagers_made,
+           {agg}(ps.buildings_made) AS buildings_made,
+           {agg}(ps.upgrades) AS upgrades,
+           {agg}(COALESCE(ps.kills, 0)) AS kills,
+           {agg}(COALESCE(ps.deaths, 0)) AS deaths,
+           {agg}(COALESCE(ps.razed, 0)) AS razed,
+           {agg}(COALESCE(ps.buildings_lost, 0)) AS buildings_lost,
+           {agg}(ps.apm) AS apm,
+           SUM(COALESCE(ps.kills, 0)) AS kills_sum,
+           SUM(COALESCE(ps.deaths, 0)) AS deaths_sum
+    FROM base b
+    JOIN game_summaries s ON s.game_id = b.game_id AND s.status = 'ok'
+    JOIN game_players gp ON gp.game_id = b.game_id AND gp.team = b.grp_team
+    JOIN players p ON p.profile_id = gp.profile_id AND p.tracked = 1
+    JOIN player_summaries ps ON ps.game_id = b.game_id AND ps.profile_id = gp.profile_id
+    LEFT JOIN units u ON u.game_id = b.game_id AND u.profile_id = gp.profile_id
+    GROUP BY p.profile_id
+    ORDER BY games DESC, label
+    """
+    keys = [c["key"] for g in COMPARISON_GROUPS for c in g["columns"]]
+    rows = []
+    for r in conn.execute(sql, params):
+        values = {}
+        for key in keys:
+            if key == "kd":
+                deaths = r["deaths_sum"] or 0
+                values["kd"] = round((r["kills_sum"] or 0) / deaths, 2) if deaths else None
+                continue
+            raw = r[key]
+            if raw is None:
+                values[key] = None
+            elif mode == "avg":
+                values[key] = round(raw, 1) if raw < 100 else round(raw)
+            else:
+                values[key] = round(raw)
+        rows.append({
+            "label": r["label"], "profile_id": r["profile_id"],
+            "games": r["games"], "values": values,
+        })
+    return {
+        "mode": mode,
+        "groups": COMPARISON_GROUPS,
+        "rows": rows,
+        "coverage": _summary_coverage(conn, f),
+    }
+
+
+def eco_kills(conn, f: Filters) -> dict:
+    """Unidades economicas destruidas: o que o grupo eliminou e o que perdeu.
+
+    A API nao diz *quem* deu o abate: o resumo registra, para cada jogador, as
+    unidades que ele perdeu. Entao "eliminadas" e a soma das perdas economicas do
+    time adversario nas partidas do recorte (credito do time, nao de um jogador),
+    e "perdidas" sai por jogador direto do resumo dele.
+    """
+    cte, params = _base_cte(conn, f)
+
+    # 1) eliminadas pelo grupo = perdas economicas do time adversario, por tipo
+    killed = []
+    for r in conn.execute(f"""{cte}
+            SELECT us.unit_key AS unit_key, SUM(us.lost) AS total,
+                   COUNT(DISTINCT b.game_id) AS games
+            FROM base b
+            JOIN game_summaries s ON s.game_id = b.game_id AND s.status = 'ok'
+            JOIN game_players gp ON gp.game_id = b.game_id AND gp.team <> b.grp_team
+            JOIN unit_stats us ON us.game_id = b.game_id AND us.profile_id = gp.profile_id
+            WHERE us.category = 'eco' AND us.lost > 0
+            GROUP BY us.unit_key
+            ORDER BY total DESC
+        """, params):
+        killed.append({"key": r["unit_key"], "label": _eco_label(r["unit_key"]),
+                       "total": r["total"] or 0, "games": r["games"] or 0})
+
+    # 2) perdidas por cada membro do grupo, por tipo de unidade
+    per_player: dict[int, dict] = {}
+    for r in conn.execute(f"""{cte}
+            SELECT p.profile_id AS profile_id,
+                   COALESCE(p.alias, p.name, CAST(p.profile_id AS TEXT)) AS label,
+                   us.unit_key AS unit_key,
+                   SUM(us.lost) AS lost,
+                   SUM(us.made) AS made,
+                   COUNT(DISTINCT b.game_id) AS games
+            FROM base b
+            JOIN game_summaries s ON s.game_id = b.game_id AND s.status = 'ok'
+            JOIN game_players gp ON gp.game_id = b.game_id AND gp.team = b.grp_team
+            JOIN players p ON p.profile_id = gp.profile_id AND p.tracked = 1
+            JOIN unit_stats us ON us.game_id = b.game_id AND us.profile_id = gp.profile_id
+            WHERE us.category = 'eco'
+            GROUP BY p.profile_id, us.unit_key
+        """, params):
+        entry = per_player.setdefault(r["profile_id"], {
+            "label": r["label"], "profile_id": r["profile_id"],
+            "games": 0, "made": 0, "lost": 0, "by_unit": {},
+        })
+        entry["games"] = max(entry["games"], r["games"] or 0)
+        entry["made"] += r["made"] or 0
+        entry["lost"] += r["lost"] or 0
+        if r["lost"]:
+            entry["by_unit"][_eco_label(r["unit_key"])] = r["lost"]
+
+    players = []
+    for entry in per_player.values():
+        games = entry["games"] or 0
+        entry["lost_per_game"] = round(entry["lost"] / games, 1) if games else None
+        entry["made_per_game"] = round(entry["made"] / games, 1) if games else None
+        entry["survival"] = round(100.0 * (entry["made"] - entry["lost"]) / entry["made"], 1) if entry["made"] else None
+        players.append(entry)
+    players.sort(key=lambda e: -e["lost"])
+
+    # 3) eliminadas por civilizacao adversaria (onde a eco inimiga mais cai)
+    by_enemy_civ = []
+    for r in conn.execute(f"""{cte}
+            SELECT gp.civilization AS label,
+                   SUM(us.lost) AS total,
+                   COUNT(DISTINCT b.game_id) AS games
+            FROM base b
+            JOIN game_summaries s ON s.game_id = b.game_id AND s.status = 'ok'
+            JOIN game_players gp ON gp.game_id = b.game_id AND gp.team <> b.grp_team
+            JOIN unit_stats us ON us.game_id = b.game_id AND us.profile_id = gp.profile_id
+            WHERE us.category = 'eco'
+            GROUP BY gp.civilization
+            HAVING COUNT(DISTINCT b.game_id) >= 3
+            ORDER BY SUM(us.lost) * 1.0 / COUNT(DISTINCT b.game_id) DESC
+        """, params):
+        if not r["label"]:
+            continue
+        by_enemy_civ.append({
+            "label": r["label"], "total": r["total"] or 0, "games": r["games"],
+            "per_game": round((r["total"] or 0) / r["games"], 1) if r["games"] else None,
+        })
+
+    coverage = _summary_coverage(conn, f)
+    games = coverage["with_summary"]
+    eliminated = sum(k["total"] for k in killed)
+    lost = sum(p["lost"] for p in players)
+    return {
+        "coverage": coverage,
+        "totals": {
+            "eliminated": eliminated,
+            "lost": lost,
+            "balance": eliminated - lost,
+            "eliminated_per_game": round(eliminated / games, 1) if games else None,
+            "lost_per_game": round(lost / games, 1) if games else None,
+        },
+        "by_unit": killed,
+        "by_player": players,
+        "by_enemy_civ": by_enemy_civ,
+    }

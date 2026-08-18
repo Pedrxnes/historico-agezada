@@ -3,6 +3,7 @@
 Uso:
     python sync.py                 # incremental (padrao)
     python sync.py --full          # backfill completo de todo o historico
+    python sync.py --summaries     # baixa o resumo detalhado das partidas do grupo
     python sync.py --import-custom partidas.json   # partidas personalizadas manuais
 """
 import argparse
@@ -15,6 +16,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 import db
+import summary
 
 API = "https://aoe4world.com/api/v0"
 PAGE_SIZE = 50          # teto real da API
@@ -181,10 +183,32 @@ def import_custom(conn, path: str) -> int:
     return count
 
 
+def run_summaries(conn, config: dict, args) -> dict:
+    """Baixa os resumos pendentes e registra a rodada no sync_log."""
+    ua = config.get("user_agent", "aoe4-friends-stats/1.0")
+    limit = args.summaries_limit if args.summaries_limit is not None else config.get("summaries_per_run", 150)
+    res = summary.sync_summaries(conn, ua, min_size=args.min_size, limit=limit, verbose=False)
+    conn.execute(
+        "INSERT INTO sync_log (ran_at, profile_id, mode, fetched, inserted, error) VALUES (?,?,?,?,?,?)",
+        (now_iso(), None, "summaries", res["total"], res["ok"],
+         f"{res['error']} falhas" if res["error"] else None),
+    )
+    conn.commit()
+    return res
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Sincroniza partidas do aoe4world")
     parser.add_argument("--full", action="store_true", help="backfill completo (ignora watermark)")
     parser.add_argument("--import-custom", metavar="ARQUIVO", help="importa partidas personalizadas de um JSON")
+    parser.add_argument("--summaries", action="store_true",
+                        help="baixa o resumo detalhado (pontuacao, recursos, abates, unidades)")
+    parser.add_argument("--no-summaries", action="store_true",
+                        help="pula o resumo detalhado no sync normal")
+    parser.add_argument("--summaries-limit", type=int, default=None,
+                        help="teto de resumos baixados nesta rodada")
+    parser.add_argument("--min-size", type=int, default=2,
+                        help="minimo de monitorados no mesmo time para a partida valer resumo")
     args = parser.parse_args()
 
     config = db.load_config()
@@ -195,6 +219,11 @@ def main() -> int:
     if args.import_custom:
         n = import_custom(conn, args.import_custom)
         print(f"partidas personalizadas importadas: {n}")
+        return 0
+
+    if args.summaries:
+        res = run_summaries(conn, config, args)
+        print(f"resumos: {res['ok']} novos, {res['missing']} sem resumo, {res['error']} com erro")
         return 0
 
     for entry in config["players"]:
@@ -215,6 +244,10 @@ def main() -> int:
             print(f"{alias or pid}: ERRO {exc}", file=sys.stderr)
         conn.commit()
         time.sleep(REQUEST_PAUSE)
+
+    if not args.no_summaries:
+        res = run_summaries(conn, config, args)
+        print(f"resumos: {res['ok']} novos, {res['missing']} sem resumo, {res['error']} com erro")
 
     total = conn.execute("SELECT COUNT(*) c FROM games").fetchone()["c"]
     print(f"total de partidas no banco: {total}")
