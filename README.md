@@ -105,17 +105,17 @@ VM `VM.Standard.A1.Flex` (ARM) com Ubuntu serve de sobra — o banco tem alguns 
 
 ```bash
 sudo apt update && sudo apt install -y python3-venv git caddy
-sudo useradd -r -m -d /opt/aoe4stats aoe4
-sudo -u aoe4 git clone <repo> /opt/aoe4stats
-cd /opt/aoe4stats
+sudo useradd -r -m -d /opt/agezada aoe4
+sudo -u aoe4 git clone <repo> /opt/agezada
+cd /opt/agezada
 sudo -u aoe4 python3 -m venv .venv
 sudo -u aoe4 .venv/bin/pip install -r requirements.txt
 sudo -u aoe4 mkdir -p data
 sudo -u aoe4 .venv/bin/python backend/sync.py --full
 
-sudo cp deploy/aoe4stats*.service deploy/aoe4stats-sync.timer /etc/systemd/system/
+sudo cp deploy/agezada*.service deploy/agezada-sync.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now aoe4stats.service aoe4stats-sync.timer
+sudo systemctl enable --now agezada.service agezada-sync.timer
 
 sudo cp deploy/Caddyfile /etc/caddy/Caddyfile   # troque o domínio antes
 sudo systemctl reload caddy
@@ -133,10 +133,10 @@ sudo netfilter-persistent save
 Verificações úteis:
 
 ```bash
-systemctl status aoe4stats
-journalctl -u aoe4stats-sync -n 50
+systemctl status agezada
+journalctl -u agezada-sync -n 50
 curl -s localhost:8000/api/health
-systemctl list-timers aoe4stats-sync.timer
+systemctl list-timers agezada-sync.timer
 ```
 
 ## Boas práticas com a API
