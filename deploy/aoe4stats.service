@@ -1,0 +1,24 @@
+[Unit]
+Description=AoE4 Squad Stats (API + site)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aoe4
+WorkingDirectory=/opt/aoe4stats/backend
+Environment=AOE4_DB=/opt/aoe4stats/data/aoe4.db
+Environment=AOE4_CONFIG=/opt/aoe4stats/players.json
+ExecStart=/opt/aoe4stats/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+# Endurecimento basico
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/aoe4stats/data
+
+[Install]
+WantedBy=multi-user.target

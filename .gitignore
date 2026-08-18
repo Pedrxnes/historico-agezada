@@ -1,0 +1,36 @@
+# Segredos - nunca commitar
+.env
+.env.*
+!.env.example
+key-vm/
+*.pem
+*.key
+id_rsa*
+
+# Dependencias
+node_modules/
+__pycache__/
+.venv/
+venv/
+
+# Build
+dist/
+build/
+.next/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Banco local
+data/*.db
+data/*.db-wal
+data/*.db-shm

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Squad Stats — AoE IV</title>
+  <meta name="description" content="Histórico e winrate das partidas que jogamos juntos em Age of Empires IV.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🏰</text></svg>">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <h1>Squad Stats <span class="sub">Age of Empires IV</span></h1>
+    <div class="meta" id="meta-sync">carregando…</div>
+  </div>
+</header>
+
+<main class="wrap viz-root">
+  <section class="filters" aria-label="Filtros">
+    <label>
+      <span>Modo</span>
+      <select id="f-preset">
+        <option value="tg">Team Game (todos)</option>
+        <option value="tg_ranked">TG Ranqueado</option>
+        <option value="tg_qm">TG Quick Match</option>
+        <option value="custom">Personalizadas</option>
+        <option value="all">Tudo</option>
+      </select>
+    </label>
+    <label>
+      <span>Grupo mínimo no time</span>
+      <select id="f-minsize">
+        <option value="2">2+ de nós</option>
+        <option value="3">3+ de nós</option>
+        <option value="4">4+ de nós</option>
+      </select>
+    </label>
+    <fieldset id="f-players">
+      <legend>Precisam estar juntos</legend>
+    </fieldset>
+    <label>
+      <span>De</span><input type="date" id="f-from">
+    </label>
+    <label>
+      <span>Até</span><input type="date" id="f-to">
+    </label>
+    <button id="f-reset" type="button">Limpar</button>
+  </section>
+
+  <section class="tiles" aria-label="Resumo">
+    <div class="tile hero">
+      <div class="tile-label">Winrate do grupo</div>
+      <div class="tile-value" id="t-winrate">—</div>
+      <div class="tile-foot" id="t-wl">—</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label">Partidas juntos</div>
+      <div class="tile-value" id="t-games">—</div>
+      <div class="tile-foot" id="t-period">—</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label">Sequência atual</div>
+      <div class="tile-value" id="t-streak">—</div>
+      <div class="tile-foot" id="t-streak-best">—</div>
+    </div>
+    <div class="tile">
+      <div class="tile-label">Duração média</div>
+      <div class="tile-value" id="t-duration">—</div>
+      <div class="tile-foot" id="t-groupsize">—</div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <figure class="card wide">
+      <figcaption>
+        <h2>Evolução mês a mês</h2>
+        <p>Em cima, vitórias e derrotas por mês. Embaixo, o winrate acumulado desde a primeira partida.</p>
+      </figcaption>
+      <div class="chart"><canvas id="c-timeline"></canvas></div>
+      <div class="chart short"><canvas id="c-trend"></canvas></div>
+    </figure>
+
+    <figure class="card wide">
+      <figcaption>
+        <h2>Winrate por formação</h2>
+        <p>Quem estava no time. Só combinações com partidas registradas.</p>
+      </figcaption>
+      <div class="chart"><canvas id="c-lineup"></canvas></div>
+    </figure>
+
+    <figure class="card">
+      <figcaption>
+        <h2>Winrate por modo</h2>
+        <p>rm = ranqueado, qm = quick match.</p>
+      </figcaption>
+      <div class="chart"><canvas id="c-kind"></canvas></div>
+    </figure>
+
+    <figure class="card">
+      <figcaption>
+        <h2>Civilizações que jogamos</h2>
+        <p>Winrate por civ escolhida por membros do grupo.</p>
+      </figcaption>
+      <div class="chart tall"><canvas id="c-civ"></canvas></div>
+    </figure>
+
+    <figure class="card">
+      <figcaption>
+        <h2>Civilizações que enfrentamos</h2>
+        <p>Nosso winrate quando a civ aparece no time inimigo.</p>
+      </figcaption>
+      <div class="chart tall"><canvas id="c-vsciv"></canvas></div>
+    </figure>
+
+    <figure class="card">
+      <figcaption>
+        <h2>Mapas</h2>
+        <p>Ordenado por número de partidas.</p>
+      </figcaption>
+      <div class="chart tall"><canvas id="c-map"></canvas></div>
+    </figure>
+
+    <figure class="card">
+      <figcaption>
+        <h2>Winrate por duração</h2>
+        <p>Onde o jogo costuma escapar.</p>
+      </figcaption>
+      <div class="chart"><canvas id="c-duration"></canvas></div>
+    </figure>
+  </section>
+
+  <section class="card">
+    <h2>Desempenho individual (só nas partidas do grupo)</h2>
+    <div class="table-scroll">
+      <table id="tbl-players">
+        <thead><tr><th>Jogador</th><th class="num">Partidas</th><th class="num">V</th><th class="num">D</th><th class="num">Winrate</th><th class="num">Rating médio</th><th class="num">Δ rating</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Últimas partidas</h2>
+      <div class="pager">
+        <button id="pg-prev" type="button">‹ anteriores</button>
+        <span id="pg-info">—</span>
+        <button id="pg-next" type="button">próximas ›</button>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table id="tbl-games">
+        <thead><tr><th>Data</th><th>Resultado</th><th>Modo</th><th>Mapa</th><th class="num">Dur.</th><th>Nosso time</th><th>Inimigos</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <details class="card">
+    <summary>Dados brutos (tabela acessível dos gráficos)</summary>
+    <div id="raw-tables"></div>
+  </details>
+</main>
+
+<footer class="wrap foot">
+  <p>Dados da <a href="https://aoe4world.com/api" rel="noopener">API pública do AoE4World</a>.
+  Partidas personalizadas não são expostas pela API pública — entram por importação manual.</p>
+</footer>
+
+<script src="/vendor/chart.umd.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

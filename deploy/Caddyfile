@@ -1,0 +1,29 @@
+# Caddy — TLS automático + proxy para o uvicorn local.
+# Troque o domínio. Sem domínio, use `:80` (sem HTTPS) ou um DNS gratuito (DuckDNS, sslip.io).
+
+squad.exemplo.com {
+	encode zstd gzip
+
+	# API: sem cache, sempre fresca.
+	@api path /api/*
+	header @api Cache-Control "no-store"
+
+	# Estáticos versionados pelo mtime; cache curto evita reload manual após deploy.
+	@static path /style.css /app.js /vendor/*
+	header @static Cache-Control "public, max-age=300"
+
+	reverse_proxy 127.0.0.1:8000
+
+	log {
+		output file /var/log/caddy/squad.log
+		format json
+	}
+}
+
+# Para deixar o site privado entre amigos, gere o hash com:
+#   caddy hash-password --plaintext 'senha-do-grupo'
+# e descomente:
+#
+#	basic_auth {
+#		amigos $2a$14$hash_gerado_aqui
+#	}

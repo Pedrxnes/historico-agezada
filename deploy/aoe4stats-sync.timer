@@ -1,0 +1,11 @@
+[Unit]
+Description=Sincroniza partidas do aoe4world a cada 15 minutos
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=15min
+RandomizedDelaySec=90
+Persistent=true
+
+[Install]
+WantedBy=timers.target

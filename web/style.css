@@ -1,0 +1,134 @@
+/* Squad Stats — tema escuro por padrao, claro respeitando o SO. */
+:root {
+  color-scheme: dark light;
+  --surface-0: #121211;
+  --surface-1: #1a1a19;
+  --surface-2: #232321;
+  --border: #35352f;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #8b8a80;
+  --win: #199e70;
+  --loss: #e66767;
+  --accent: #3987e5;
+  --radius: 12px;
+  --maxw: 1180px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --surface-0: #f4f3f0;
+    --surface-1: #fcfcfb;
+    --surface-2: #f0efec;
+    --border: #dedcd5;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #77756e;
+    --win: #1baf7a;
+    --loss: #e34948;
+    --accent: #2a78d6;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font: 15px/1.5 ui-sans-serif, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
+
+.topbar {
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  padding: 18px 0;
+  margin-bottom: 24px;
+}
+.topbar .wrap { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+h1 .sub { color: var(--text-muted); font-weight: 400; font-size: 14px; margin-left: 8px; }
+.meta { color: var(--text-muted); font-size: 13px; }
+
+/* ---- filtros ---- */
+.filters {
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; margin-bottom: 20px;
+}
+.filters label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-secondary); }
+.filters select, .filters input[type="date"] {
+  background: var(--surface-2); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 14px;
+  min-height: 36px;
+}
+.filters fieldset {
+  border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px 8px;
+  display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+}
+.filters legend { font-size: 12px; color: var(--text-secondary); padding: 0 4px; }
+.filters fieldset label { flex-direction: row; align-items: center; gap: 6px; font-size: 14px; color: var(--text-primary); min-height: 32px; }
+#f-reset {
+  background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; min-height: 36px;
+}
+#f-reset:hover { border-color: var(--accent); }
+
+/* ---- tiles ---- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+.tile-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.tile-value { font-size: 34px; font-weight: 650; line-height: 1.15; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.tile.hero .tile-value { font-size: 44px; }
+.tile-foot { font-size: 13px; color: var(--text-secondary); margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+/* ---- cards e graficos ---- */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.card {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px 18px; margin: 0 0 16px;
+}
+.card.wide { grid-column: 1 / -1; }
+.card h2 { font-size: 15px; margin: 0 0 2px; }
+.card figcaption p, .card > p { margin: 0 0 12px; font-size: 13px; color: var(--text-muted); }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.chart { position: relative; height: 260px; }
+.chart.tall { height: 340px; }
+
+/* ---- tabelas ---- */
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { color: var(--text-muted); font-weight: 550; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr:hover { background: var(--surface-2); }
+.res { font-weight: 650; }
+.res.win { color: var(--win); }
+.res.loss { color: var(--loss); }
+.civ { color: var(--text-secondary); font-size: 12px; }
+.us { color: var(--accent); font-weight: 600; }
+a { color: var(--accent); }
+
+.pager { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--text-secondary); }
+.pager button {
+  background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer; min-height: 32px;
+}
+.pager button:disabled { opacity: 0.4; cursor: default; }
+
+details.card summary { cursor: pointer; color: var(--text-secondary); font-size: 14px; }
+details.card table { margin: 12px 0 20px; }
+details.card h3 { font-size: 13px; margin: 16px 0 4px; color: var(--text-secondary); }
+
+.foot { color: var(--text-muted); font-size: 12.5px; padding-bottom: 32px; }
+.empty { color: var(--text-muted); font-size: 14px; padding: 24px 0; text-align: center; }
+
+@media (max-width: 560px) {
+  .tile.hero .tile-value { font-size: 36px; }
+  .chart, .chart.tall { height: 240px; }
+}
+.chart.short { height: 180px; margin-top: 8px; }
