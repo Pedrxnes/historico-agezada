@@ -140,6 +140,61 @@
     </div>
   </section>
 
+  <section class="card" id="card-comparison">
+    <div class="card-head">
+      <div>
+        <h2>Comparativo</h2>
+        <p>Cada célula traz uma barra proporcional ao maior valor da coluna. Vem do resumo detalhado de cada partida.</p>
+      </div>
+      <label class="inline">
+        <span>Números</span>
+        <select id="cmp-mode">
+          <option value="avg">média por partida</option>
+          <option value="sum">total no período</option>
+        </select>
+      </label>
+    </div>
+    <div class="table-scroll">
+      <table id="tbl-comparison" class="matrix">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="note" id="cmp-note"></p>
+  </section>
+
+  <section class="card" id="card-eco">
+    <div class="card-head">
+      <div>
+        <h2>Unidades econômicas eliminadas</h2>
+        <p>Aldeões, comerciantes e barcos de pesca que caíram — dos dois lados.</p>
+      </div>
+    </div>
+    <div class="tiles compact" id="eco-tiles"></div>
+    <h3 class="sub-head">Eliminadas pelo grupo, por tipo</h3>
+    <div class="table-scroll">
+      <table id="tbl-eco-units">
+        <thead><tr><th>Unidade</th><th class="num">Eliminadas</th><th class="num">Por partida</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <h3 class="sub-head">Economia perdida por cada um de nós</h3>
+    <div class="table-scroll">
+      <table id="tbl-eco-players">
+        <thead><tr><th>Jogador</th><th class="num">Partidas</th><th class="num">Produzidas</th><th class="num">Perdidas</th><th class="num">Perdidas/partida</th><th class="num">Sobreviveram</th><th>Detalhe</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <h3 class="sub-head">Contra qual civ a economia inimiga mais cai</h3>
+    <div class="table-scroll">
+      <table id="tbl-eco-civs">
+        <thead><tr><th>Civ inimiga</th><th class="num">Partidas</th><th class="num">Eliminadas</th><th class="num">Por partida</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="note">A API entrega quais unidades cada jogador <strong>perdeu</strong>, não quem deu o abate. Por isso “eliminadas” é crédito do time (soma das perdas econômicas do time adversário), e “perdidas” sai individual.</p>
+  </section>
+
   <section class="card">
     <div class="card-head">
       <h2>Últimas partidas</h2>

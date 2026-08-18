@@ -132,3 +132,70 @@ details.card h3 { font-size: 13px; margin: 16px 0 4px; color: var(--text-seconda
   .chart, .chart.tall { height: 240px; }
 }
 .chart.short { height: 180px; margin-top: 8px; }
+
+/* ---- comparativo (matriz jogador x metrica, barra dentro da celula) ---- */
+:root {
+  --tone-score: #3987e5;
+  --tone-food: #a33a3a;
+  --tone-wood: #6f7a2e;
+  --tone-gold: #a8862a;
+  --tone-stone: #6b6b6b;
+  --tone-oil: #4a7f6a;
+  --tone-neutral: #4a4a46;
+  --tone-good: #199e70;
+  --tone-bad: #a4483f;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --tone-score: #a9cbf5;
+    --tone-food: #f0b8b8;
+    --tone-wood: #d5dda0;
+    --tone-gold: #eed69a;
+    --tone-stone: #d5d4cf;
+    --tone-oil: #b3d8c9;
+    --tone-neutral: #dedcd5;
+    --tone-good: #a7e0c8;
+    --tone-bad: #f0bcb6;
+  }
+}
+
+.card-head .inline { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-secondary); }
+.card-head .inline select {
+  background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 13px; min-height: 34px;
+}
+
+table.matrix { font-size: 13px; }
+table.matrix th.group {
+  text-align: left; border-bottom: none; padding-bottom: 0;
+  color: var(--text-muted); font-size: 11px; letter-spacing: 0.08em;
+}
+table.matrix th.group + th.group { border-left: 1px solid var(--border); }
+table.matrix thead tr.cols th { padding-top: 2px; font-size: 11px; text-transform: none; letter-spacing: 0; }
+table.matrix td, table.matrix th { padding: 5px 7px; }
+table.matrix td.name { font-weight: 600; color: var(--accent); }
+table.matrix td.games { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* A celula e o trilho; a barra e o fundo proporcional ao maior valor da coluna. */
+td.cell { position: relative; text-align: right; font-variant-numeric: tabular-nums; min-width: 62px; }
+td.cell .bar {
+  position: absolute; inset: 2px auto 2px 2px; width: 0;
+  border-radius: 3px; background: var(--tone-neutral); opacity: 0.45;
+}
+td.cell .val { position: relative; }
+td.cell.tone-score .bar { background: var(--tone-score); }
+td.cell.tone-food  .bar { background: var(--tone-food); }
+td.cell.tone-wood  .bar { background: var(--tone-wood); }
+td.cell.tone-gold  .bar { background: var(--tone-gold); }
+td.cell.tone-stone .bar { background: var(--tone-stone); }
+td.cell.tone-oil   .bar { background: var(--tone-oil); }
+td.cell.tone-good  .bar { background: var(--tone-good); }
+td.cell.tone-bad   .bar { background: var(--tone-bad); }
+table.matrix tbody tr:hover td.cell .bar { opacity: 0.7; }
+
+.note { font-size: 12.5px; color: var(--text-muted); margin: 10px 0 0; }
+.sub-head { font-size: 13px; margin: 18px 0 6px; color: var(--text-secondary); }
+.tiles.compact { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin: 4px 0 12px; }
+.tiles.compact .tile { padding: 12px 14px; background: var(--surface-2); }
+.tiles.compact .tile-value { font-size: 26px; }
+.detail { color: var(--text-muted); font-size: 12px; }

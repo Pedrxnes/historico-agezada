@@ -16,6 +16,8 @@ aoe4world API ──sync.py──> SQLite ──stats.py──> FastAPI /api ─
 - Uma partida entra nas estatísticas quando **≥ N jogadores monitorados estão no mesmo time**
   (padrão N=2). É isso que torna o winrate representativo do grupo.
 - `stats.py` faz todas as agregações em SQL sobre uma CTE `base` (uma linha por partida elegível).
+- `summary.py` baixa o **resumo detalhado** de cada partida elegível e é o que alimenta o
+  Comparativo e a seção de unidades econômicas (detalhes abaixo).
 
 ## Jogadores monitorados
 
@@ -89,7 +91,8 @@ Abrir <http://127.0.0.1:8000>.
 
 | Rota | O que devolve |
 |---|---|
-| `GET /api/stats` | todos os agregados de uma vez (resumo, mapas, civs, formações, timeline…) |
+| `GET /api/stats` | todos os agregados de uma vez (resumo, mapas, civs, formações, timeline, comparativo, economia) |
+| `GET /api/comparison` | só o comparativo jogador × métrica + unidades econômicas (`mode=avg\|sum`) |
 | `GET /api/games` | lista paginada de partidas com times e civs |
 | `GET /api/facets` | jogadores, modos e temporadas disponíveis (para montar filtros) |
 | `GET /api/health` | contagem de partidas e último sync |
@@ -99,23 +102,65 @@ Parâmetros comuns: `preset` (`tg`, `tg_ranked`, `tg_qm`, `ffa`, `custom`, `all`
 `players` (ids separados por vírgula que precisam estar **juntos** no mesmo time),
 `min_size`, `from`, `to`, `season`, `map`.
 
+## Comparativo e unidades econômicas
+
+A API pública `/api/v0` só entrega o placar da partida (quem jogou, civ, resultado, rating).
+Pontuação, recursos gastos, abates e build order ficam em outro endpoint, o mesmo que o site do
+AoE4World usa na página de cada jogo:
+
+```
+GET https://www.aoe4world.com/players/{profile_id}/games/{game_id}/summary?camelize=true
+```
+
+Ele responde JSON e funciona sem assinatura para quem está com o **Match History público**.
+Partida antiga costuma não ter resumo (devolve 404) — esse status fica gravado para não
+repetir a chamada.
+
+```bash
+python backend/sync.py --summaries                    # baixa o que falta
+python backend/sync.py --summaries --summaries-limit 50
+python backend/sync.py --no-summaries                 # sync normal sem os resumos
+```
+
+O sync normal já baixa até `summaries_per_run` resumos por rodada (padrão 150, configurável em
+`players.json`). Só partidas elegíveis entram na fila.
+
+O que sai do resumo:
+
+| Tabela | Conteúdo |
+|---|---|
+| `game_summaries` | status do download por partida (`ok`, `missing`, `error`) |
+| `player_summaries` | pontuação (total/militar/econômica/tecnológica/social), recursos gastos e coletados por tipo, abates, perdas, arrasados, construções, pesquisas, APM |
+| `unit_stats` | produzidas e perdidas **por tipo de unidade**, com categoria (`eco`, `militar`, `cerco`, `religioso`, `explorador`) |
+
+**Comparativo** é a matriz jogador × métrica, com barra em cada célula proporcional ao maior
+valor da coluna (mesma leitura do "Comparison" do AoE4World). Alterna entre média por partida
+e total do período.
+
+**Unidades econômicas eliminadas** usa `unit_stats`. Uma ressalva importante: o resumo diz
+quais unidades **cada jogador perdeu**, não quem deu o abate. Então:
+
+- *eliminadas* = soma das perdas econômicas do time adversário nas partidas do recorte —
+  é crédito do time, não dá para atribuir a um jogador;
+- *perdidas* = individual, direto do resumo de cada um.
+
 ## Deploy na VM free da Oracle
 
 VM `VM.Standard.A1.Flex` (ARM) com Ubuntu serve de sobra — o banco tem alguns MB.
 
 ```bash
 sudo apt update && sudo apt install -y python3-venv git caddy
-sudo useradd -r -m -d /opt/aoe4stats aoe4
-sudo -u aoe4 git clone <repo> /opt/aoe4stats
-cd /opt/aoe4stats
+sudo useradd -r -m -d /opt/agezada aoe4
+sudo -u aoe4 git clone <repo> /opt/agezada
+cd /opt/agezada
 sudo -u aoe4 python3 -m venv .venv
 sudo -u aoe4 .venv/bin/pip install -r requirements.txt
 sudo -u aoe4 mkdir -p data
 sudo -u aoe4 .venv/bin/python backend/sync.py --full
 
-sudo cp deploy/aoe4stats*.service deploy/aoe4stats-sync.timer /etc/systemd/system/
+sudo cp deploy/agezada*.service deploy/agezada-sync.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now aoe4stats.service aoe4stats-sync.timer
+sudo systemctl enable --now agezada.service agezada-sync.timer
 
 sudo cp deploy/Caddyfile /etc/caddy/Caddyfile   # troque o domínio antes
 sudo systemctl reload caddy
@@ -133,10 +178,10 @@ sudo netfilter-persistent save
 Verificações úteis:
 
 ```bash
-systemctl status aoe4stats
-journalctl -u aoe4stats-sync -n 50
+systemctl status agezada
+journalctl -u agezada-sync -n 50
 curl -s localhost:8000/api/health
-systemctl list-timers aoe4stats-sync.timer
+systemctl list-timers agezada-sync.timer
 ```
 
 ## Boas práticas com a API

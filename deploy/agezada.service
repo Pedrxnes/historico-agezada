@@ -6,10 +6,10 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=aoe4
-WorkingDirectory=/opt/aoe4stats/backend
-Environment=AOE4_DB=/opt/aoe4stats/data/aoe4.db
-Environment=AOE4_CONFIG=/opt/aoe4stats/players.json
-ExecStart=/opt/aoe4stats/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000
+WorkingDirectory=/opt/agezada/backend
+Environment=AOE4_DB=/opt/agezada/data/aoe4.db
+Environment=AOE4_CONFIG=/opt/agezada/players.json
+ExecStart=/opt/agezada/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000
 Restart=on-failure
 RestartSec=5
 
@@ -18,7 +18,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/aoe4stats/data
+ReadWritePaths=/opt/agezada/data
 
 [Install]
 WantedBy=multi-user.target

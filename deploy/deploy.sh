@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Deploy do agezada: puxa o codigo novo, atualiza deps e reinicia o servico.
-# Uso na VM: /opt/aoe4stats/deploy/deploy.sh
+# Uso na VM: /opt/agezada/deploy/deploy.sh
 set -euo pipefail
 
-APP_DIR=/opt/aoe4stats
+APP_DIR=/opt/agezada
 APP_USER=aoe4
-SERVICE=aoe4stats.service
+SERVICE=agezada.service
 HEALTH_URL=http://127.0.0.1:8000/
 
 echo ">> git pull"
