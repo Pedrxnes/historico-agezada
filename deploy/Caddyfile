@@ -14,10 +14,8 @@ squad.exemplo.com {
 
 	reverse_proxy 127.0.0.1:8000
 
-	log {
-		output file /var/log/caddy/squad.log
-		format json
-	}
+	# Log vai pro journal (journalctl -u caddy). Arquivo proprio exigiria
+	# afrouxar o sandbox da unit systemd do pacote Debian.
 }
 
 # Para deixar o site privado entre amigos, gere o hash com:

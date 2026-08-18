@@ -43,6 +43,7 @@ Já configurados:
 | floiiD | 24270406 | floiiD, the slippery bastard |
 | CORONEL767 | 23812852 | CORONEL767 |
 | pedrxness | 24295731 | pedrxness |
+| vitts | 23335941 | vitts de vitera |
 
 ## Partidas personalizadas (custom)
 
