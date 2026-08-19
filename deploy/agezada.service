@@ -5,21 +5,20 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/agezada/backend
-Environment=AOE4_DB=/home/ubuntu/agezada/data/aoe4.db
-Environment=AOE4_CONFIG=/home/ubuntu/agezada/players.json
-ExecStart=/home/ubuntu/agezada/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000
+User=aoe4
+WorkingDirectory=/opt/agezada/backend
+Environment=AOE4_DB=/opt/agezada/data/aoe4.db
+Environment=AOE4_CONFIG=/opt/agezada/players.json
+ExecStart=/opt/agezada/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000
 Restart=on-failure
 RestartSec=5
 
-# Endurecimento basico.
-# ProtectHome fica desligado de proposito: o checkout mora em /home/ubuntu.
+# Endurecimento basico
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=false
-ReadWritePaths=/home/ubuntu/agezada/data
+ProtectHome=true
+ReadWritePaths=/opt/agezada/data
 
 [Install]
 WantedBy=multi-user.target

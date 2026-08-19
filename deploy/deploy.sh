@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # Deploy do agezada: puxa o codigo novo, atualiza deps e reinicia o servico.
-# Uso na VM (como usuario ubuntu): ~/agezada/deploy/deploy.sh
+# Uso na VM: /opt/agezada/deploy/deploy.sh
 set -euo pipefail
 
-APP_DIR=${APP_DIR:-/home/ubuntu/agezada}
+APP_DIR=${APP_DIR:-/opt/agezada}
+APP_USER=${APP_USER:-aoe4}
 SERVICE=agezada.service
 HEALTH_URL=http://127.0.0.1:8000/api/health
 
 echo ">> git pull"
-git -C "$APP_DIR" pull --ff-only
+sudo -u "$APP_USER" git -C "$APP_DIR" pull --ff-only
 
 echo ">> dependencias"
-"$APP_DIR/.venv/bin/pip" install -q -r "$APP_DIR/requirements.txt"
+sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -q -r "$APP_DIR/requirements.txt"
 
 echo ">> restart"
 sudo systemctl restart "$SERVICE"

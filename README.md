@@ -178,18 +178,19 @@ python backend/sync.py --summaries --redo-all --summaries-limit 999
 ## Deploy na VM free da Oracle
 
 VM `VM.Standard.A1.Flex` (ARM) com Ubuntu serve de sobra — o banco tem alguns MB.
-As units em `deploy/` assumem o checkout em **`/home/ubuntu/agezada`** rodando como o usuário
-**`ubuntu`**. Mudou de lugar? Troque os caminhos nos três arquivos antes de copiar.
+As units em `deploy/` assumem o checkout em **`/opt/agezada`** rodando como o usuário de
+serviço **`aoe4`**. Mudou de lugar? Troque os caminhos nos três arquivos antes de copiar.
 
 ```bash
 sudo apt update && sudo apt install -y python3-venv git caddy
-git clone <repo> ~/agezada
-cd ~/agezada
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-mkdir -p data
-.venv/bin/python backend/sync.py --full          # primeira carga (alguns minutos)
-.venv/bin/python backend/sync.py --summaries --summaries-limit 999   # resumos detalhados
+sudo useradd -r -m -d /opt/agezada aoe4
+sudo -u aoe4 git clone <repo> /opt/agezada
+cd /opt/agezada
+sudo -u aoe4 python3 -m venv .venv
+sudo -u aoe4 .venv/bin/pip install -r requirements.txt
+sudo -u aoe4 mkdir -p data
+sudo -u aoe4 .venv/bin/python backend/sync.py --full          # primeira carga
+sudo -u aoe4 .venv/bin/python backend/sync.py --summaries --summaries-limit 999
 
 sudo cp deploy/agezada*.service deploy/agezada-sync.timer /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -199,23 +200,37 @@ sudo cp deploy/Caddyfile /etc/caddy/Caddyfile   # troque o domínio antes
 sudo systemctl reload caddy
 ```
 
-Se já havia um uvicorn subido na mão (`nohup`/`tmux`), mate antes de habilitar o serviço,
-senão a porta 8000 fica ocupada e o systemd não sobe:
-
-```bash
-sudo ss -lptn 'sport = :8000'      # pega o PID
-kill <PID>
-```
-
 Deploys seguintes:
 
 ```bash
-~/agezada/deploy/deploy.sh          # pull + deps + restart + health check
+/opt/agezada/deploy/deploy.sh       # pull + deps + restart + health check
 ```
 
 O restart é obrigatório: `git pull` não troca o código já carregado na memória do uvicorn.
 O health check avisa se a resposta vier sem a chave `summaries` — sinal de que o processo
-antigo continuou de pé.
+antigo continuou de pé, ou de que o pull foi feito em outro checkout que ninguém serve.
+
+### Migrando de uma instalação antiga (`aoe4stats`)
+
+Instalação anterior à renomeação vive em `/opt/aoe4stats` com a unit `aoe4stats.service`:
+
+```bash
+sudo systemctl disable --now aoe4stats.service aoe4stats-sync.timer
+sudo rm -f /etc/systemd/system/aoe4stats*.service /etc/systemd/system/aoe4stats*.timer
+sudo mv /opt/aoe4stats /opt/agezada
+
+# O venv guarda o caminho antigo nos shebangs — recriar é mais simples que corrigir.
+sudo -u aoe4 python3 -m venv --clear /opt/agezada/.venv
+sudo -u aoe4 /opt/agezada/.venv/bin/pip install -r /opt/agezada/requirements.txt
+
+cd /opt/agezada && sudo -u aoe4 git pull --ff-only
+sudo cp deploy/agezada*.service deploy/agezada-sync.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now agezada.service agezada-sync.timer
+curl -s localhost:8000/api/health
+```
+
+O banco (`data/aoe4.db`) vai junto no `mv`, então nada é ressincronizado do zero.
 
 **Rede da Oracle — dois firewalls, não um.** Liberar 80/443 na Security List/NSG da VCN **e**
 na instância (Ubuntu da Oracle vem com regras `REJECT` no iptables):
