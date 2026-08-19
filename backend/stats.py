@@ -6,6 +6,7 @@ nao o de cada um jogando sozinho.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 
 # Presets de modo de jogo -> fragmento SQL sobre a tabela games (alias g)
@@ -657,4 +658,178 @@ def eco_kills(conn, f: Filters) -> dict:
         "by_unit": killed,
         "by_player": players,
         "by_enemy_civ": by_enemy_civ,
+    }
+
+
+# Metricas mostradas no comparativo de uma partida so (mesma leitura da matriz geral).
+GAME_COLUMNS = [
+    {"label": "Pontuação", "columns": [
+        {"key": "score_total", "label": "Total", "tone": "score"},
+        {"key": "score_military", "label": "Militar", "tone": "score"},
+        {"key": "score_economy", "label": "Econ.", "tone": "score"},
+        {"key": "score_technology", "label": "Tecn.", "tone": "score"},
+    ]},
+    {"label": "Recursos gastos", "columns": [
+        {"key": "spent_total", "label": "Total", "tone": "neutral"},
+        {"key": "spent_food", "label": "Comida", "tone": "food"},
+        {"key": "spent_wood", "label": "Madeira", "tone": "wood"},
+        {"key": "spent_gold", "label": "Ouro", "tone": "gold"},
+        {"key": "spent_stone", "label": "Pedra", "tone": "stone"},
+    ]},
+    {"label": "Produção", "columns": [
+        {"key": "units_made", "label": "Unidades", "tone": "neutral"},
+        {"key": "villagers_made", "label": "Aldeões", "tone": "neutral"},
+        {"key": "buildings_made", "label": "Construções", "tone": "neutral"},
+        {"key": "upgrades", "label": "Pesquisas", "tone": "neutral"},
+    ]},
+    {"label": "Combate", "columns": [
+        {"key": "kills", "label": "Abates", "tone": "good"},
+        {"key": "deaths", "label": "Perdas", "tone": "bad"},
+        {"key": "razed", "label": "Arrasados", "tone": "good"},
+        {"key": "buildings_lost", "label": "Prédios perd.", "tone": "bad"},
+    ]},
+    {"label": "Ritmo", "columns": [
+        {"key": "apm", "label": "APM", "tone": "neutral"},
+    ]},
+]
+
+
+def game_detail(conn, game_id: int) -> dict | None:
+    """Detalhe de uma partida: aldeões perdidos por jogador dos dois times + comparativo.
+
+    Os aldeões perdidos saem do build order de cada jogador (`destroyed`), que traz o
+    segundo de jogo de cada perda — por isso dá para montar a linha do tempo do raide.
+    A API nao registra quem deu o abate, so quem perdeu a unidade.
+    """
+    game = conn.execute(
+        """SELECT game_id, started_at, duration, map, kind, leaderboard, season,
+                  server, average_mmr, source
+           FROM games WHERE game_id = ?""", (game_id,)).fetchone()
+    if game is None:
+        return None
+
+    summary_row = conn.execute(
+        "SELECT status, win_reason FROM game_summaries WHERE game_id = ?", (game_id,)).fetchone()
+    status = summary_row["status"] if summary_row else None
+
+    players = [dict(r) for r in conn.execute(
+        """SELECT gp.profile_id, gp.team, gp.result, gp.civilization, gp.rating, gp.rating_diff,
+                  COALESCE(p.alias, p.name, gp.name, CAST(gp.profile_id AS TEXT)) AS name,
+                  COALESCE(p.tracked, 0) AS tracked
+           FROM game_players gp
+           LEFT JOIN players p ON p.profile_id = gp.profile_id
+           WHERE gp.game_id = ?
+           ORDER BY gp.team, name""", (game_id,))]
+    if not players:
+        return None
+
+    stats_by_pid = {r["profile_id"]: dict(r) for r in conn.execute(
+        "SELECT * FROM player_summaries WHERE game_id = ?", (game_id,))}
+
+    # Aldeões e demais unidades economicas, com os instantes das perdas.
+    eco_by_pid: dict[int, dict] = {}
+    for r in conn.execute(
+            """SELECT profile_id, unit_key, made, lost, lost_at
+               FROM unit_stats WHERE game_id = ? AND category = 'eco'""", (game_id,)):
+        entry = eco_by_pid.setdefault(r["profile_id"], {
+            "villagers_made": 0, "villagers_lost": 0, "eco_made": 0, "eco_lost": 0,
+            "lost_at": [], "by_unit": {},
+        })
+        is_villager = "villager" in r["unit_key"]
+        entry["eco_made"] += r["made"] or 0
+        entry["eco_lost"] += r["lost"] or 0
+        if is_villager:
+            entry["villagers_made"] += r["made"] or 0
+            entry["villagers_lost"] += r["lost"] or 0
+        if r["lost"]:
+            entry["by_unit"][_eco_label(r["unit_key"])] = r["lost"]
+        if r["lost_at"]:
+            try:
+                entry["lost_at"].extend(json.loads(r["lost_at"]))
+            except (TypeError, ValueError):
+                pass
+
+    duration = game["duration"] or 0
+    minutes = max(1, int(round(duration / 60.0)) or 1)
+
+    # Nosso time = onde estao os jogadores monitorados.
+    tracked_by_team: dict[int, int] = {}
+    for p in players:
+        if p["tracked"]:
+            tracked_by_team[p["team"]] = tracked_by_team.get(p["team"], 0) + 1
+    our_team = max(tracked_by_team, key=tracked_by_team.get) if tracked_by_team else None
+
+    teams: dict[int, dict] = {}
+    for p in players:
+        eco = eco_by_pid.get(p["profile_id"], {})
+        ps = stats_by_pid.get(p["profile_id"], {})
+        lost_at = sorted(eco.get("lost_at") or [])
+        # Um balde por minuto de jogo: mostra quando a economia caiu.
+        buckets = [0] * (minutes + 1)
+        for t in lost_at:
+            idx = min(minutes, int(t // 60))
+            buckets[idx] += 1
+        worst = max(range(len(buckets)), key=lambda i: buckets[i]) if lost_at else None
+
+        made = eco.get("villagers_made", 0)
+        lost = eco.get("villagers_lost", 0)
+        row = {
+            "profile_id": p["profile_id"],
+            "name": p["name"],
+            "civilization": p["civilization"],
+            "tracked": bool(p["tracked"]),
+            "result": p["result"],
+            "rating": p["rating"],
+            "rating_diff": p["rating_diff"],
+            "villagers_made": made,
+            "villagers_lost": lost,
+            "villagers_alive": made - lost,
+            "loss_pct": round(100.0 * lost / made, 1) if made else None,
+            "eco_lost": eco.get("eco_lost", 0),
+            "eco_by_unit": eco.get("by_unit", {}),
+            "lost_at": lost_at,
+            "per_minute": buckets,
+            "worst_minute": {"minute": worst, "count": buckets[worst]} if worst is not None else None,
+            "stats": {k: ps.get(k) for k in (
+                "score_total", "score_military", "score_economy", "score_technology",
+                "spent_total", "spent_food", "spent_wood", "spent_gold", "spent_stone",
+                "units_made", "buildings_made", "upgrades",
+                "kills", "deaths", "razed", "buildings_lost", "apm")},
+        }
+        row["stats"]["villagers_made"] = made
+        team = teams.setdefault(p["team"], {
+            "team": p["team"],
+            "is_ours": p["team"] == our_team,
+            "result": None,
+            "villagers_made": 0,
+            "villagers_lost": 0,
+            "players": [],
+        })
+        team["players"].append(row)
+        team["villagers_made"] += made
+        team["villagers_lost"] += lost
+        if p["result"] in ("win", "loss"):
+            team["result"] = p["result"]
+
+    ordered = sorted(teams.values(), key=lambda t: (not t["is_ours"], t["team"]))
+    for t in ordered:
+        t["players"].sort(key=lambda r: -r["villagers_lost"])
+
+    return {
+        "game": {
+            "game_id": game["game_id"],
+            "started_at": game["started_at"],
+            "duration_min": round(duration / 60.0, 1),
+            "duration_minutes": minutes,
+            "map": game["map"],
+            "kind": game["kind"],
+            "server": game["server"],
+            "average_mmr": game["average_mmr"],
+            "win_reason": summary_row["win_reason"] if summary_row else None,
+            "url": f"https://aoe4world.com/players/{players[0]['profile_id']}/games/{game['game_id']}",
+        },
+        "summary_status": status,
+        "has_summary": status == "ok",
+        "columns": GAME_COLUMNS,
+        "teams": ordered,
     }

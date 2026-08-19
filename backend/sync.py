@@ -187,7 +187,8 @@ def run_summaries(conn, config: dict, args) -> dict:
     """Baixa os resumos pendentes e registra a rodada no sync_log."""
     ua = config.get("user_agent", "aoe4-friends-stats/1.0")
     limit = args.summaries_limit if args.summaries_limit is not None else config.get("summaries_per_run", 150)
-    res = summary.sync_summaries(conn, ua, min_size=args.min_size, limit=limit, verbose=False)
+    res = summary.sync_summaries(conn, ua, min_size=args.min_size, limit=limit,
+                                 redo_all=getattr(args, "redo_all", False), verbose=False)
     conn.execute(
         "INSERT INTO sync_log (ran_at, profile_id, mode, fetched, inserted, error) VALUES (?,?,?,?,?,?)",
         (now_iso(), None, "summaries", res["total"], res["ok"],
@@ -207,6 +208,8 @@ def main() -> int:
                         help="pula o resumo detalhado no sync normal")
     parser.add_argument("--summaries-limit", type=int, default=None,
                         help="teto de resumos baixados nesta rodada")
+    parser.add_argument("--redo-all", action="store_true",
+                        help="rebaixa tambem os resumos ja gravados (util apos mudanca de schema)")
     parser.add_argument("--min-size", type=int, default=2,
                         help="minimo de monitorados no mesmo time para a partida valer resumo")
     args = parser.parse_args()

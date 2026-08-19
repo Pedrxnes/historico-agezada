@@ -145,6 +145,19 @@ def api_games(
         conn.close()
 
 
+@app.get("/api/games/{game_id}")
+def api_game_detail(game_id: int):
+    """Detalhe de uma partida: aldeoes perdidos por jogador dos dois times + comparativo."""
+    conn = get_conn()
+    try:
+        data = stats.game_detail(conn, game_id)
+        if data is None:
+            return JSONResponse({"error": "partida nao encontrada"}, status_code=404)
+        return data
+    finally:
+        conn.close()
+
+
 @app.get("/api/health")
 def api_health():
     conn = get_conn()

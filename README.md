@@ -93,6 +93,7 @@ Abrir <http://127.0.0.1:8000>.
 |---|---|
 | `GET /api/stats` | todos os agregados de uma vez (resumo, mapas, civs, formações, timeline, comparativo, economia) |
 | `GET /api/comparison` | só o comparativo jogador × métrica + unidades econômicas (`mode=avg\|sum`) |
+| `GET /api/games/{game_id}` | detalhe de uma partida: aldeões perdidos por jogador dos dois times + comparativo |
 | `GET /api/games` | lista paginada de partidas com times e civs |
 | `GET /api/facets` | jogadores, modos e temporadas disponíveis (para montar filtros) |
 | `GET /api/health` | contagem de partidas e último sync |
@@ -143,6 +144,36 @@ quais unidades **cada jogador perdeu**, não quem deu o abate. Então:
 - *eliminadas* = soma das perdas econômicas do time adversário nas partidas do recorte —
   é crédito do time, não dá para atribuir a um jogador;
 - *perdidas* = individual, direto do resumo de cada um.
+
+### Por que não dá para saber quem matou o aldeão
+
+Cada jogador tem três contadores de abate no resumo, e todos os três foram conferidos contra
+as perdas do time adversário partida a partida:
+
+| Contador | O que é de fato |
+|---|---|
+| `elitekill` (a coluna "Kills" do AoE4World) | unidades **militares** inimigas mortas — bate exato com a soma das perdas militares do outro time |
+| `ekills` | `elitekill` + prédios inimigos destruídos |
+| `sqkill` | mesma coisa contada por esquadrão, não por unidade |
+
+Aldeão morto não entra em nenhum deles. A única marca de um aldeão que caiu está no build
+order da **vítima** (`destroyed`), que registra o segundo da perda. Por isso o site mostra
+quantos aldeões cada jogador perdeu e quando, nunca quem matou. O replay `.rec` também não
+ajuda: é log de comandos de input, não de dano.
+
+### Tela "aldeões perdidos"
+
+Cada linha de **Últimas partidas** tem o botão *aldeões perdidos*, que abre o detalhe da
+partida: aldeões produzidos, perdidos, % perdido e sobreviventes de **cada jogador dos dois
+times**, com o pior minuto e uma barra por minuto de jogo mostrando quando a economia caiu.
+Dentro dele, o comparativo completo daquela partida.
+
+A linha do tempo depende da coluna `unit_stats.lost_at` (JSON com o segundo de cada perda),
+que só é preenchida por resumos baixados depois dessa mudança. Para repopular os antigos:
+
+```bash
+python backend/sync.py --summaries --redo-all --summaries-limit 999
+```
 
 ## Deploy na VM free da Oracle
 

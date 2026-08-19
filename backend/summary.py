@@ -162,14 +162,18 @@ def save_summary(conn: sqlite3.Connection, game_id: int, payload: dict) -> int:
             if item.get("type") != "Unit":
                 continue
             key = unit_key(item.get("icon") or "")
-            entry = tally.setdefault(key, {"made": 0, "lost": 0})
+            entry = tally.setdefault(key, {"made": 0, "lost": 0, "lost_at": []})
             entry["made"] += len(item.get("finished") or [])
-            entry["lost"] += len(item.get("destroyed") or [])
+            destroyed = item.get("destroyed") or []
+            entry["lost"] += len(destroyed)
+            # Segundo de jogo de cada perda: e o que permite a linha do tempo do raide.
+            entry["lost_at"].extend(t for t in destroyed if isinstance(t, (int, float)))
         for key, entry in tally.items():
             conn.execute(
-                """INSERT INTO unit_stats (game_id, profile_id, unit_key, category, made, lost)
-                   VALUES (?,?,?,?,?,?)""",
-                (game_id, int(pid), key, categorize(key), entry["made"], entry["lost"]),
+                """INSERT INTO unit_stats (game_id, profile_id, unit_key, category, made, lost, lost_at)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (game_id, int(pid), key, categorize(key), entry["made"], entry["lost"],
+                 json.dumps(sorted(int(t) for t in entry["lost_at"])) if entry["lost_at"] else None),
             )
     return len(players)
 
@@ -188,13 +192,17 @@ def mark(conn, game_id: int, status: str, version=None, win_reason=None, error=N
     )
 
 
-def pending_games(conn: sqlite3.Connection, min_size: int = 2, redo_errors: bool = True) -> list[tuple[int, int]]:
+def pending_games(conn: sqlite3.Connection, min_size: int = 2, redo_errors: bool = True,
+                  redo_all: bool = False) -> list[tuple[int, int]]:
     """Partidas do grupo que ainda nao tem resumo: [(game_id, profile_id_para_consultar)].
 
     So vale a pena baixar resumo de partida elegivel (>= min_size monitorados no mesmo
     time) — e o unico recorte que aparece nas telas.
     """
-    skip = "('ok', 'missing')" if redo_errors else "('ok', 'missing', 'error')"
+    if redo_all:
+        skip = "('missing')"          # rebaixa tudo que ja deu certo (mudanca de schema)
+    else:
+        skip = "('ok', 'missing')" if redo_errors else "('ok', 'missing', 'error')"
     rows = conn.execute(
         f"""
         WITH grp AS (
@@ -221,8 +229,8 @@ def pending_games(conn: sqlite3.Connection, min_size: int = 2, redo_errors: bool
 
 
 def sync_summaries(conn, user_agent: str, min_size: int = 2, limit: int | None = None,
-                   redo_errors: bool = True, verbose: bool = True) -> dict:
-    todo = pending_games(conn, min_size=min_size, redo_errors=redo_errors)
+                   redo_errors: bool = True, redo_all: bool = False, verbose: bool = True) -> dict:
+    todo = pending_games(conn, min_size=min_size, redo_errors=redo_errors, redo_all=redo_all)
     if limit:
         todo = todo[:limit]
     done = missing = failed = 0

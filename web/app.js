@@ -281,7 +281,10 @@
         <td class="num">${g.duration_min} min</td>
         <td>${playerList(g.allies)}</td>
         <td>${playerList(g.enemies)}</td>
-        <td>${g.url ? `<a href="${g.url}" target="_blank" rel="noopener">detalhe</a>` : ""}</td>
+        <td class="row-actions">
+          <button type="button" class="link-btn" data-game="${g.game_id}">aldeões perdidos</button>
+          ${g.url ? `<a href="${g.url}" target="_blank" rel="noopener">aoe4world</a>` : ""}
+        </td>
       </tr>`).join("") || '<tr><td colspan="8" class="empty">Sem partidas nesse filtro.</td></tr>';
 
     const from = payload.total ? state.offset + 1 : 0;
@@ -378,6 +381,112 @@
       </tr>`).join("") || '<tr><td colspan="4" class="empty">Sem dados.</td></tr>';
   }
 
+  // ---------- detalhe de uma partida (aldeões perdidos) ----------
+  const secLabel = (s) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+  /** Barrinhas por minuto: mostra quando a economia do jogador caiu. */
+  function lossSpark(perMinute, peak) {
+    if (!perMinute || !perMinute.length || !peak) return '<span class="detail">—</span>';
+    return `<span class="spark" role="img" aria-label="perdas por minuto">${perMinute
+      .map((n, i) => `<i style="height:${n ? Math.max(12, (n / peak) * 100) : 0}%" title="min ${i}: ${n}"></i>`)
+      .join("")}</span>`;
+  }
+
+  function detailPlayerRow(p, peak) {
+    const worst = p.worst_minute && p.worst_minute.count
+      ? `min ${p.worst_minute.minute} (${p.worst_minute.count})` : "—";
+    const extra = Object.entries(p.eco_by_unit || {})
+      .filter(([k]) => !k.startsWith("Aldeões"))
+      .map(([k, v]) => `${k}: ${v}`).join(" · ");
+    return `
+      <tr>
+        <td class="${p.tracked ? "us" : ""}">${p.name}${p.result === "win" ? " 🏆" : ""}</td>
+        <td class="civ">${civLabel(p.civilization)}</td>
+        <td class="num">${p.villagers_made}</td>
+        <td class="num strong">${p.villagers_lost}</td>
+        <td class="num">${p.loss_pct === null ? "—" : `${numFmt(p.loss_pct)}%`}</td>
+        <td class="num">${p.villagers_alive}</td>
+        <td class="detail">${worst}${extra ? ` · ${extra}` : ""}</td>
+        <td>${lossSpark(p.per_minute, peak)}</td>
+      </tr>`;
+  }
+
+  function detailComparison(teams, groups) {
+    const cols = groups.flatMap((g) => g.columns);
+    const rows = teams.flatMap((t) => t.players.map((p) => ({ ...p, team: t })));
+    const max = {};
+    cols.forEach((c) => { max[c.key] = Math.max(0, ...rows.map((r) => Number(r.stats[c.key]) || 0)); });
+    const groupRow = `<tr class="groups"><th class="group"></th>${groups
+      .map((g) => `<th class="group" colspan="${g.columns.length}">${g.label}</th>`).join("")}</tr>`;
+    const colRow = `<tr class="cols"><th>Jogador</th>${cols
+      .map((c) => `<th class="num">${c.label}</th>`).join("")}</tr>`;
+    const body = rows.map((r) => {
+      const cells = cols.map((c) => {
+        const v = r.stats[c.key];
+        const width = max[c.key] > 0 && v ? Math.max(2, (Number(v) / max[c.key]) * 100) : 0;
+        return `<td class="cell tone-${c.tone}"><span class="bar" style="width:${width.toFixed(1)}%"></span><span class="val">${numFmt(v)}</span></td>`;
+      }).join("");
+      return `<tr><td class="name ${r.tracked ? "us" : ""}">${r.name}</td>${cells}</tr>`;
+    }).join("");
+    return `<table class="matrix"><thead>${groupRow}${colRow}</thead><tbody>${body}</tbody></table>`;
+  }
+
+  function renderGameDetail(d) {
+    const g = d.game;
+    const peak = Math.max(1, ...d.teams.flatMap((t) => t.players.flatMap((p) => p.per_minute || [0])));
+    const head = `
+      <div class="detail-head">
+        <h2>Aldeões perdidos</h2>
+        <p>${g.map || "?"} · ${kindLabel(g.kind)} · ${dateLabel(g.started_at)} · ${g.duration_min} min${g.win_reason ? ` · ${g.win_reason === "Surrender" ? "encerrada por rendição" : g.win_reason}` : ""}</p>
+      </div>`;
+
+    if (!d.has_summary) {
+      return `${head}<p class="empty">Essa partida não tem resumo detalhado na API${d.summary_status === "missing" ? " (partidas antigas costumam não ter)" : " ainda"}.</p>`;
+    }
+
+    const teams = d.teams.map((t) => `
+      <div class="team-block">
+        <h3 class="sub-head">${t.is_ours ? "Nosso time" : "Time adversário"}
+          <span class="tag ${t.result || ""}">${t.result === "win" ? "venceu" : t.result === "loss" ? "perdeu" : ""}</span>
+          <span class="detail">${t.villagers_lost} aldeões perdidos de ${t.villagers_made} produzidos</span>
+        </h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>Jogador</th><th>Civ</th><th class="num">Produzidos</th><th class="num">Perdidos</th>
+              <th class="num">% perdido</th><th class="num">Sobraram</th><th>Pior minuto</th><th>Por minuto</th>
+            </tr></thead>
+            <tbody>${t.players.map((p) => detailPlayerRow(p, peak)).join("")}</tbody>
+          </table>
+        </div>
+      </div>`).join("");
+
+    const ours = d.teams.find((t) => t.is_ours);
+    const theirs = d.teams.find((t) => !t.is_ours);
+    const saldo = ours && theirs
+      ? `<p class="note">Saldo da partida: o time adversário perdeu <strong>${theirs.villagers_lost}</strong> aldeões, o nosso perdeu <strong>${ours.villagers_lost}</strong>.
+         A API não registra quem deu cada abate — só quem perdeu a unidade e em que minuto.</p>`
+      : "";
+
+    return `${head}${teams}${saldo}
+      <details class="detail-cmp">
+        <summary>Comparativo completo da partida</summary>
+        <div class="table-scroll">${detailComparison(d.teams, d.columns)}</div>
+      </details>`;
+  }
+
+  async function openGameDetail(gameId) {
+    const dlg = $("#game-detail");
+    $("#game-detail-body").innerHTML = '<p class="empty">Carregando…</p>';
+    dlg.showModal();
+    try {
+      const data = await getJSON(`/api/games/${gameId}`);
+      $("#game-detail-body").innerHTML = renderGameDetail(data);
+    } catch (err) {
+      $("#game-detail-body").innerHTML = `<p class="empty">Não deu para carregar: ${err.message}</p>`;
+    }
+  }
+
   // ---------- carregamento ----------
   async function loadStats() {
     const params = currentFilters();
@@ -443,6 +552,11 @@
       document.querySelectorAll("#f-players input").forEach((i) => { i.checked = false; });
       rerun();
     });
+    $("#tbl-games tbody").addEventListener("click", (ev) => {
+      const btn = ev.target.closest("button[data-game]");
+      if (btn) openGameDetail(btn.dataset.game);
+    });
+    $("#game-detail-close").addEventListener("click", () => $("#game-detail").close());
     $("#pg-prev").addEventListener("click", () => { state.offset = Math.max(0, state.offset - state.limit); loadGames(); });
     $("#pg-next").addEventListener("click", () => { state.offset += state.limit; loadGames(); });
 
