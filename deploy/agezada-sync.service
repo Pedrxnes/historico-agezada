@@ -5,13 +5,15 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=aoe4
-WorkingDirectory=/opt/agezada/backend
-Environment=AOE4_DB=/opt/agezada/data/aoe4.db
-Environment=AOE4_CONFIG=/opt/agezada/players.json
-ExecStart=/opt/agezada/.venv/bin/python sync.py
+User=ubuntu
+WorkingDirectory=/home/ubuntu/agezada/backend
+Environment=AOE4_DB=/home/ubuntu/agezada/data/aoe4.db
+Environment=AOE4_CONFIG=/home/ubuntu/agezada/players.json
+ExecStart=/home/ubuntu/agezada/.venv/bin/python sync.py
+# Baixar os resumos detalhados leva mais tempo que o sync das partidas.
+TimeoutStartSec=30min
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/agezada/data
+ProtectHome=false
+ReadWritePaths=/home/ubuntu/agezada/data
