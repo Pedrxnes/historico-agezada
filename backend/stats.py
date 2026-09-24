@@ -352,7 +352,9 @@ def games_list(conn, f: Filters, limit: int = 50, offset: int = 0):
     cte, params = _base_cte(conn, f)
     total = conn.execute(f"{cte} SELECT COUNT(*) AS c FROM base", params).fetchone()["c"]
     rows = conn.execute(f"""{cte}
-        SELECT * FROM base ORDER BY started_at DESC LIMIT ? OFFSET ?""",
+        SELECT b.*, s.win_reason FROM base b
+        LEFT JOIN game_summaries s ON s.game_id = b.game_id
+        ORDER BY b.started_at DESC LIMIT ? OFFSET ?""",
         params + [limit, offset]).fetchall()
     games = []
     for r in rows:
@@ -382,6 +384,7 @@ def games_list(conn, f: Filters, limit: int = 50, offset: int = 0):
             "average_mmr": r["average_mmr"],
             "source": r["source"],
             "result": r["grp_result"],
+            "win_reason": r["win_reason"],
             "group_size": r["n_tracked"],
             "allies": allies,
             "enemies": enemies,
@@ -398,8 +401,10 @@ def facets(conn) -> dict:
     kinds = [r["kind"] for r in conn.execute("SELECT DISTINCT kind FROM games ORDER BY kind")]
     seasons = [r["season"] for r in conn.execute(
         "SELECT DISTINCT season FROM games WHERE season IS NOT NULL ORDER BY season DESC")]
+    maps = [r["map"] for r in conn.execute(
+        "SELECT map FROM games WHERE map IS NOT NULL GROUP BY map ORDER BY COUNT(*) DESC, map")]
     last_sync = conn.execute("SELECT MAX(ran_at) AS ts FROM sync_log WHERE error IS NULL").fetchone()["ts"]
-    return {"players": players, "kinds": kinds, "seasons": seasons, "last_sync": last_sync}
+    return {"players": players, "kinds": kinds, "seasons": seasons, "maps": maps, "last_sync": last_sync}
 
 
 # ---------------------------------------------------------------------------

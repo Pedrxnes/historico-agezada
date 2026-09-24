@@ -1,5 +1,5 @@
 [Unit]
-Description=AoE4 Squad Stats (API + site)
+Description=Agezada (API + site)
 After=network-online.target
 Wants=network-online.target
 

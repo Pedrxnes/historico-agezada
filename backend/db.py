@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS unit_stats (
     made        INTEGER NOT NULL DEFAULT 0,
     lost        INTEGER NOT NULL DEFAULT 0,
     lost_at     TEXT,
+    made_at     TEXT,
     PRIMARY KEY (game_id, profile_id, unit_key),
     FOREIGN KEY (game_id) REFERENCES games(game_id) ON DELETE CASCADE
 );
@@ -150,6 +151,7 @@ def connect(path: Path | str = DB_PATH) -> sqlite3.Connection:
 # Colunas adicionadas depois do schema original: (tabela, coluna, tipo).
 MIGRATIONS = [
     ("unit_stats", "lost_at", "TEXT"),
+    ("unit_stats", "made_at", "TEXT"),
 ]
 
 

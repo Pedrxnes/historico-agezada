@@ -1,4 +1,4 @@
-# AoE4 Squad Stats
+# Agezada
 
 Site de histórico e winrate das partidas que **jogamos juntos** em Age of Empires IV.
 Puxa da API pública do [AoE4World](https://aoe4world.com/api), guarda em SQLite e publica
@@ -91,7 +91,8 @@ Abrir <http://127.0.0.1:8000>.
 
 | Rota | O que devolve |
 |---|---|
-| `GET /api/stats` | todos os agregados de uma vez (resumo, mapas, civs, formações, timeline, comparativo, economia) |
+| `GET /api/view/{aba}` | dados de uma aba do site: `overview`, `players`, `civs`, `economy`, `combat`, `records`, `player` (com `pid`) |
+| `GET /api/stats` | todos os agregados antigos de uma vez (resumo, mapas, civs, formações, timeline, comparativo, economia) |
 | `GET /api/comparison` | só o comparativo jogador × métrica + unidades econômicas (`mode=avg\|sum`) |
 | `GET /api/games/{game_id}` | detalhe de uma partida: aldeões perdidos por jogador dos dois times + comparativo |
 | `GET /api/games` | lista paginada de partidas com times e civs |
@@ -101,7 +102,32 @@ Abrir <http://127.0.0.1:8000>.
 
 Parâmetros comuns: `preset` (`tg`, `tg_ranked`, `tg_qm`, `ffa`, `custom`, `all`),
 `players` (ids separados por vírgula que precisam estar **juntos** no mesmo time),
-`min_size`, `from`, `to`, `season`, `map`.
+`min_size`, `from`, `to`, `season`, `map`. Em `/api/view` também `min_games` (corte dos rankings)
+e `cmp_mode` (`avg|sum`).
+
+## O site
+
+Menu no topo com uma aba por assunto; cada aba só pede os próprios dados. Os filtros ficam na
+URL (`/?season=12&map=Dry+Arabia#/civs`), então dá para mandar o link com o recorte pronto.
+
+| Aba | O que mostra |
+|---|---|
+| Visão geral | winrate, sequência, evolução mensal, força do adversário (diferença de MMR), como as partidas terminam (`win_reason`), efeito tilt, modo e duração |
+| Jogadores | desempenho individual, parcerias (winrate da dupla × média individual = sinergia), formações, comparativo |
+| Civs & Mapas | civs jogadas e enfrentadas, combinações de civ no mesmo time, mapas |
+| Economia | coleta × gasto, economia inicial (aldeões aos 5/10/15 min), primeiro aldeão perdido, unidades econômicas eliminadas |
+| Combate | composição do exército por jogador e winrate por estilo dominante |
+| Recordes | top 3 de cada marca numa partida só; clique abre a partida |
+| Partidas | lista paginada com detalhe de cada jogo |
+| `#/jogador/{id}` | página do jogador: civs, mapas, parceiros, ele × média do grupo, exército |
+
+Toda tabela ordena ao clicar no cabeçalho. Linhas com menos de 10 partidas aparecem apagadas
+(amostra pequena). Bandeiras das civs em `web/img/civs/` vêm do repositório público
+[aoe4world/explorer](https://github.com/aoe4world/explorer/tree/main/assets/flags); mapa não tem
+arte pública, então usa um selo com as iniciais.
+
+A classificação do exército (infantaria, à distância, cavalaria, cerco, religioso, naval) é
+heurística pelo nome da unidade — ver `army_class` em `backend/insights.py`.
 
 ## Comparativo e unidades econômicas
 
@@ -168,8 +194,9 @@ partida: aldeões produzidos, perdidos, % perdido e sobreviventes de **cada joga
 times**, com o pior minuto e uma barra por minuto de jogo mostrando quando a economia caiu.
 Dentro dele, o comparativo completo daquela partida.
 
-A linha do tempo depende da coluna `unit_stats.lost_at` (JSON com o segundo de cada perda),
-que só é preenchida por resumos baixados depois dessa mudança. Para repopular os antigos:
+A linha do tempo depende da coluna `unit_stats.lost_at` (JSON com o segundo de cada perda), e a
+"economia inicial" depende de `unit_stats.made_at` (segundo em que cada unidade ficou pronta).
+As duas só são preenchidas por resumos baixados depois que a coluna existe. Para repopular os antigos:
 
 ```bash
 python backend/sync.py --summaries --redo-all --summaries-limit 999

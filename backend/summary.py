@@ -118,6 +118,10 @@ def _num(value) -> int | None:
         return None
 
 
+def _times(values: list) -> str | None:
+    return json.dumps(sorted(int(t) for t in values)) if values else None
+
+
 def save_summary(conn: sqlite3.Connection, game_id: int, payload: dict) -> int:
     """Grava player_summaries + unit_stats. Devolve quantos jogadores foram gravados."""
     conn.execute("DELETE FROM player_summaries WHERE game_id = ?", (game_id,))
@@ -162,18 +166,22 @@ def save_summary(conn: sqlite3.Connection, game_id: int, payload: dict) -> int:
             if item.get("type") != "Unit":
                 continue
             key = unit_key(item.get("icon") or "")
-            entry = tally.setdefault(key, {"made": 0, "lost": 0, "lost_at": []})
-            entry["made"] += len(item.get("finished") or [])
+            entry = tally.setdefault(key, {"made": 0, "lost": 0, "made_at": [], "lost_at": []})
+            finished = item.get("finished") or []
+            entry["made"] += len(finished)
+            # Segundo em que cada unidade ficou pronta: base da "economia inicial".
+            entry["made_at"].extend(t for t in finished if isinstance(t, (int, float)))
             destroyed = item.get("destroyed") or []
             entry["lost"] += len(destroyed)
             # Segundo de jogo de cada perda: e o que permite a linha do tempo do raide.
             entry["lost_at"].extend(t for t in destroyed if isinstance(t, (int, float)))
         for key, entry in tally.items():
             conn.execute(
-                """INSERT INTO unit_stats (game_id, profile_id, unit_key, category, made, lost, lost_at)
-                   VALUES (?,?,?,?,?,?,?)""",
+                """INSERT INTO unit_stats (game_id, profile_id, unit_key, category, made, lost,
+                                          made_at, lost_at)
+                   VALUES (?,?,?,?,?,?,?,?)""",
                 (game_id, int(pid), key, categorize(key), entry["made"], entry["lost"],
-                 json.dumps(sorted(int(t) for t in entry["lost_at"])) if entry["lost_at"] else None),
+                 _times(entry["made_at"]), _times(entry["lost_at"])),
             )
     return len(players)
 

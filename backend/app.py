@@ -8,12 +8,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import db
+import insights
 import stats
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "web"
 
-app = FastAPI(title="AoE4 Squad Stats", docs_url="/api/docs", redoc_url=None)
+app = FastAPI(title="Agezada", docs_url="/api/docs", redoc_url=None)
 
 
 def get_conn():
@@ -121,6 +122,72 @@ def api_comparison(
     conn = get_conn()
     try:
         return {"comparison": stats.comparison(conn, f, mode), "eco_kills": stats.eco_kills(conn, f)}
+    finally:
+        conn.close()
+
+
+VIEWS = ("overview", "players", "civs", "economy", "combat", "records")
+
+
+@app.get("/api/view/{view}")
+def api_view(
+    view: str,
+    preset: str = COMMON["preset"],
+    players: str | None = COMMON["players"],
+    min_size: int = COMMON["min_size"],
+    date_from: str | None = COMMON["date_from"],
+    date_to: str | None = COMMON["date_to"],
+    season: int | None = COMMON["season"],
+    map_name: str | None = COMMON["map_name"],
+    min_games: int = Query(3, ge=1, le=50, description="minimo de partidas para aparecer nos rankings"),
+    cmp_mode: str = Query("avg", description="comparativo: avg (media por partida) ou sum (total)"),
+    pid: int | None = Query(None, description="profile_id para a view player"),
+):
+    """Os dados de uma aba do site. O frontend so pede a aba que esta aberta."""
+    f = parse_filters(preset, players, min_size, date_from, date_to, season, map_name)
+    conn = get_conn()
+    try:
+        if view == "overview":
+            return {
+                "summary": stats.summary(conn, f),
+                "timeline": stats.timeline(conn, f),
+                "by_kind": stats.by_kind(conn, f),
+                "by_duration": stats.by_duration(conn, f),
+                "win_reasons": insights.win_reasons(conn, f),
+                "mmr_gap": insights.mmr_gap(conn, f),
+                "tilt": insights.tilt(conn, f),
+            }
+        if view == "players":
+            return {
+                "by_player": stats.by_player(conn, f),
+                "by_lineup": stats.by_lineup(conn, f, min_games),
+                "partnerships": insights.partnerships(conn, f, min_games),
+                "comparison": stats.comparison(conn, f, cmp_mode),
+            }
+        if view == "civs":
+            return {
+                "by_civ": stats.by_civ(conn, f, min_games),
+                "vs_civ": stats.vs_civ(conn, f, min_games),
+                "civ_combos": insights.civ_combos(conn, f, min_games),
+                "by_map": stats.by_map(conn, f, min_games),
+            }
+        if view == "economy":
+            return {
+                "resources": insights.resources(conn, f),
+                "eco_kills": stats.eco_kills(conn, f),
+                "early_eco": insights.early_eco(conn, f),
+                "first_villager": insights.first_villager(conn, f),
+            }
+        if view == "combat":
+            return {"army": insights.army(conn, f)}
+        if view == "records":
+            return {"records": insights.records(conn, f), "summary": stats.summary(conn, f)}
+        if view == "player":
+            data = insights.player_profile(conn, f, pid, min_games) if pid is not None else None
+            if data is None:
+                return JSONResponse({"error": "jogador nao encontrado"}, status_code=404)
+            return data
+        return JSONResponse({"error": f"view desconhecida; use {', '.join(VIEWS)} ou player"}, status_code=404)
     finally:
         conn.close()
 
